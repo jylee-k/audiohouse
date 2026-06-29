@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Invoice Split Optimizer</title>
+    <meta name="description" content="Optimize how to split purchases across two invoices to maximize discounts and cashback savings.">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --background: #f1f5f9;
+            --surface: #ffffff;
+            --surface-2: #f8fafc;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #e2e8f0;
+            --green: #16a34a;
+            --green-bg: #f0fdf4;
+            --green-border: #bbf7d0;
+            --red: #dc2626;
+            --amber: #d97706;
+            --blue-bg: #eff6ff;
+            --blue-border: #bfdbfe;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--background);
+            color: var(--text);
+            margin: 0;
+            padding: 2rem 1rem;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+        }
+
+        .card {
+            background: var(--surface);
+            padding: 1.75rem;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px rgb(0 0 0 / 0.08), 0 4px 12px rgb(0 0 0 / 0.06);
+            margin-bottom: 1.25rem;
+        }
+
+        h1 { margin: 0 0 0.25rem; font-size: 1.6rem; }
+        h2 { margin: 0 0 1rem; font-size: 1.2rem; }
+        h3 { margin: 0 0 0.75rem; font-size: 1rem; }
+        p.subtitle { margin: 0 0 1.5rem; color: var(--text-muted); font-size: 0.9rem; }
+
+        hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
+
+        /* --- Input row --- */
+        .input-grid {
+            display: grid;
+            grid-template-columns: 2fr 1.1fr 0.7fr auto auto;
+            gap: 0.6rem;
+            align-items: center;
+            margin-bottom: 0.75rem;
+        }
+
+        .input-grid label.cb-label {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            color: var(--text-muted);
+        }
+
+        input[type="text"],
+        input[type="number"] {
+            padding: 0.55rem 0.7rem;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 0.95rem;
+            width: 100%;
+            color: var(--text);
+            background: var(--surface-2);
+            transition: border-color 0.15s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            background: white;
+        }
+
+        button {
+            cursor: pointer;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: opacity 0.15s, transform 0.1s;
+        }
+
+        button:active { transform: scale(0.97); }
+
+        .btn-add {
+            background: var(--primary);
+            color: white;
+            padding: 0.55rem 1rem;
+            white-space: nowrap;
+        }
+
+        .btn-add:hover { background: var(--primary-dark); }
+
+        .btn-submit {
+            background: var(--primary);
+            color: white;
+            width: 100%;
+            padding: 0.8rem;
+            font-size: 1rem;
+            margin-top: 1rem;
+            border-radius: 8px;
+        }
+
+        .btn-submit:hover { background: var(--primary-dark); }
+        .btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .btn-remove {
+            background: #fee2e2;
+            color: var(--red);
+            padding: 0.3rem 0.6rem;
+            font-size: 0.8rem;
+            border-radius: 4px;
+        }
+
+        .btn-remove:hover { background: #fecaca; }
+
+        /* --- Items List --- */
+        .item-list {
+            margin: 1rem 0;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .item-row {
+            display: grid;
+            grid-template-columns: 2fr 1fr 0.6fr 0.7fr auto;
+            gap: 0.6rem;
+            align-items: center;
+            background: var(--surface-2);
+            padding: 0.5rem 0.75rem;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        .item-row .item-name { font-weight: 500; }
+        .item-row .item-price { color: var(--text-muted); }
+        .item-row .item-qty { color: var(--text-muted); font-size: 0.82rem; }
+
+        .badge {
+            display: inline-block;
+            padding: 0.2rem 0.5rem;
+            border-radius: 99px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        .badge-green { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+        .badge-red   { background: #fef2f2; color: var(--red); border: 1px solid #fecaca; }
+
+        .empty-state {
+            text-align: center;
+            color: var(--text-muted);
+            font-style: italic;
+            padding: 1.5rem 0;
+            font-size: 0.9rem;
+        }
+
+        /* --- Results --- */
+        #results { display: none; }
+
+        .total-pay-banner {
+            background: linear-gradient(135deg, #1e40af, #2563eb);
+            color: white;
+            border-radius: 10px;
+            padding: 1.25rem 1.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1.25rem;
+        }
+
+        .total-pay-banner .label { font-size: 0.9rem; opacity: 0.85; }
+        .total-pay-banner .amount { font-size: 2rem; font-weight: 700; }
+        .total-pay-banner .saved { font-size: 0.85rem; opacity: 0.9; margin-top: 0.15rem; }
+
+        .invoice-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+
+        .invoice-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+        }
+
+        .invoice-card h3 {
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-muted);
+            margin-bottom: 0.75rem;
+        }
+
+        .invoice-items { margin-bottom: 0.75rem; }
+
+        .inv-item {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.875rem;
+            padding: 0.25rem 0;
+            border-bottom: 1px dashed var(--border);
+        }
+
+        .inv-item:last-child { border-bottom: none; }
+        .inv-item .qty-tag { color: var(--text-muted); font-size: 0.8rem; }
+
+        .invoice-math {
+            border-top: 2px solid var(--border);
+            margin-top: 0.5rem;
+            padding-top: 0.5rem;
+            font-size: 0.875rem;
+        }
+
+        .math-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.18rem 0;
+        }
+
+        .math-row.subtotal { color: var(--text-muted); }
+        .math-row.deduction { color: var(--green); }
+        .math-row.total-row {
+            font-weight: 700;
+            font-size: 0.95rem;
+            border-top: 1px solid var(--border);
+            margin-top: 0.25rem;
+            padding-top: 0.35rem;
+        }
+
+        /* --- Cashback breakdown --- */
+        .cashback-section {
+            background: var(--blue-bg);
+            border: 1px solid var(--blue-border);
+            border-radius: 10px;
+            padding: 1rem 1.1rem;
+        }
+
+        .cashback-section h3 {
+            color: #1d4ed8;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.75rem;
+        }
+
+        .cb-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.6rem;
+        }
+
+        .cb-stat {
+            background: white;
+            border: 1px solid var(--blue-border);
+            border-radius: 7px;
+            padding: 0.6rem 0.8rem;
+        }
+
+        .cb-stat .cb-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.2rem; }
+        .cb-stat .cb-value { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+        .cb-stat .cb-value.used { color: var(--green); }
+        .cb-stat .cb-value.cap { color: var(--amber); }
+
+        /* spinner */
+        .spinner {
+            display: inline-block;
+            width: 14px; height: 14px;
+            border: 2px solid rgba(255,255,255,0.4);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+            vertical-align: middle;
+            margin-right: 6px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        @media (max-width: 600px) {
+            .input-grid { grid-template-columns: 1fr 1fr; }
+            .input-grid .cb-label, .input-grid .btn-add { grid-column: span 2; }
+            .invoice-grid { grid-template-columns: 1fr; }
+            .cb-grid { grid-template-columns: repeat(2, 1fr); }
+            .item-row { grid-template-columns: 1fr 0.7fr auto; }
+            .item-row .item-qty, .item-row .item-eligible { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="card">
+        <h1>Invoice Split Optimizer</h1>
+        <p class="subtitle">Add your items below. The optimizer will allocate quantities across two invoices to maximize discounts and cashback savings.</p>
+
+        <div class="input-grid">
+            <input type="text" id="item-name" placeholder="Item name (e.g. Sofa)">
+            <input type="number" id="item-price" placeholder="Unit price ($)" min="0" step="0.01">
+            <input type="number" id="item-qty" placeholder="Qty" min="1" step="1" value="1" style="text-align:center;">
+            <label class="cb-label">
+                <input type="checkbox" id="item-eligible" checked> Cashback eligible
+            </label>
+            <button class="btn-add" onclick="addItem()">Add</button>
+        </div>
+
+        <h3>Items</h3>
+        <div id="item-list" class="item-list">
+            <div class="empty-state">No items added yet.</div>
+        </div>
+
+        <button id="optimize-btn" class="btn-submit" onclick="runOptimization()">Optimize Invoice Splits</button>
+    </div>
+
+    <div id="results">
+        <div class="total-pay-banner">
+            <div>
+                <div class="label">Total Amount to Pay</div>
+                <div class="amount">$<span id="res-total-pay">0</span></div>
+            </div>
+            <div style="text-align:right;">
+                <div class="saved">🎉 Total Saved: $<span id="res-total-saved">0</span></div>
+            </div>
+        </div>
+
+        <div class="invoice-grid">
+            <!-- Invoice 1 -->
+            <div class="invoice-card">
+                <h3>Invoice 1 — Earn Cashback</h3>
+                <div class="invoice-items" id="inv1-items"></div>
+                <div class="invoice-math">
+                    <div class="math-row subtotal">
+                        <span>Subtotal</span><span>$<span id="inv1-subtotal">0</span></span>
+                    </div>
+                    <div class="math-row deduction">
+                        <span>Discount</span><span>−$<span id="inv1-discount">0</span></span>
+                    </div>
+                    <div class="math-row total-row">
+                        <span>You Pay</span><span>$<span id="inv1-pay">0</span></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Invoice 2 -->
+            <div class="invoice-card">
+                <h3>Invoice 2 — Spend Cashback</h3>
+                <div class="invoice-items" id="inv2-items"></div>
+                <div class="invoice-math">
+                    <div class="math-row subtotal">
+                        <span>Subtotal</span><span>$<span id="inv2-subtotal">0</span></span>
+                    </div>
+                    <div class="math-row deduction">
+                        <span>Discount</span><span>−$<span id="inv2-discount">0</span></span>
+                    </div>
+                    <div class="math-row subtotal">
+                        <span>After discount</span><span>$<span id="inv2-after-discount">0</span></span>
+                    </div>
+                    <div class="math-row deduction">
+                        <span>Cashback used</span><span>−$<span id="inv2-cashback">0</span></span>
+                    </div>
+                    <div class="math-row total-row">
+                        <span>You Pay</span><span>$<span id="inv2-pay">0</span></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Cashback breakdown -->
+        <div class="cashback-section">
+            <h3>💳 Cashback Breakdown</h3>
+            <div class="cb-grid">
+                <div class="cb-stat">
+                    <div class="cb-label">Cashback Earned</div>
+                    <div class="cb-value">$<span id="cb-earned">0</span></div>
+                </div>
+                <div class="cb-stat">
+                    <div class="cb-label">Spend Cap (20% of Inv 2 post-discount)</div>
+                    <div class="cb-value cap">$<span id="cb-cap">0</span></div>
+                </div>
+                <div class="cb-stat">
+                    <div class="cb-label">Cashback Redeemed</div>
+                    <div class="cb-value used">$<span id="cb-redeemed">0</span></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let items = [];
+
+    function fmt(n) {
+        return Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function addItem() {
+        const nameInput  = document.getElementById('item-name');
+        const priceInput = document.getElementById('item-price');
+        const qtyInput   = document.getElementById('item-qty');
+        const eligInput  = document.getElementById('item-eligible');
+
+        const name  = nameInput.value.trim() || `Item ${items.length + 1}`;
+        const price = parseFloat(priceInput.value);
+        const qty   = parseInt(qtyInput.value, 10);
+
+        if (isNaN(price) || price <= 0) { alert('Please enter a valid price.'); return; }
+        if (isNaN(qty)   || qty   <  1) { alert('Quantity must be at least 1.'); return; }
+
+        items.push({ id: Date.now(), name, price, quantity: qty, eligible: eligInput.checked });
+        renderItems();
+
+        nameInput.value  = '';
+        priceInput.value = '';
+        qtyInput.value   = '1';
+        eligInput.checked = true;
+        nameInput.focus();
+    }
+
+    function removeItem(id) {
+        items = items.filter(item => item.id !== id);
+        renderItems();
+    }
+
+    function renderItems() {
+        const listDiv = document.getElementById('item-list');
+        if (items.length === 0) {
+            listDiv.innerHTML = '<div class="empty-state">No items added yet.</div>';
+            return;
+        }
+        listDiv.innerHTML = items.map(item => `
+            <div class="item-row">
+                <span class="item-name">${item.name}</span>
+                <span class="item-price">$${fmt(item.price)} / unit</span>
+                <span class="item-qty">×${item.quantity} = $${fmt(item.price * item.quantity)}</span>
+                <span class="item-eligible">
+                    <span class="badge ${item.eligible ? 'badge-green' : 'badge-red'}">
+                        ${item.eligible ? '✓ Eligible' : '✗ Ineligible'}
+                    </span>
+                </span>
+                <button class="btn-remove" onclick="removeItem(${item.id})">Remove</button>
+            </div>
+        `).join('');
+    }
+
+    async function runOptimization() {
+        if (items.length === 0) { alert('Please add at least one item.'); return; }
+
+        const btn = document.getElementById('optimize-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span>Optimizing…';
+
+        try {
+            const response = await fetch('/api/optimize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items })
+            });
+            if (!response.ok) throw new Error(`Server error ${response.status}`);
+            const data = await response.json();
+            displayResults(data);
+        } catch (error) {
+            alert('Error connecting to optimization backend. Make sure the Python API is running (uv run python main.py).');
+            console.error(error);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Optimize Invoice Splits';
+        }
+    }
+
+    function renderInvoiceItems(containerId, invItems) {
+        const el = document.getElementById(containerId);
+        if (invItems.length === 0) {
+            el.innerHTML = '<div style="color:var(--text-muted);font-size:0.85rem;font-style:italic;">No items</div>';
+            return;
+        }
+        el.innerHTML = invItems.map(it => `
+            <div class="inv-item">
+                <span>
+                    ${it.name}
+                    <span class="qty-tag">×${it.quantity}</span>
+                    ${it.eligible ? '' : '<span class="badge badge-red" style="margin-left:4px;font-size:0.7rem;">Ineligible</span>'}
+                </span>
+                <span>$${fmt(it.price * it.quantity)}</span>
+            </div>
+        `).join('');
+    }
+
+    function set(id, val) { document.getElementById(id).textContent = val; }
+
+    function displayResults(data) {
+        const t = data.totals;
+
+        // Totals banner
+        set('res-total-pay',   fmt(t.total_pay));
+        set('res-total-saved', fmt(t.total_saved));
+
+        // Invoice 1
+        renderInvoiceItems('inv1-items', data.invoice_1);
+        set('inv1-subtotal', fmt(t.invoice_1_subtotal));
+        set('inv1-discount', fmt(t.invoice_1_discount));
+        set('inv1-pay',      fmt(t.invoice_1_pay));
+
+        // Invoice 2
+        renderInvoiceItems('inv2-items', data.invoice_2);
+        set('inv2-subtotal',       fmt(t.invoice_2_subtotal));
+        set('inv2-discount',       fmt(t.invoice_2_discount));
+        set('inv2-after-discount', fmt(t.invoice_2_after_discount));
+        set('inv2-cashback',       fmt(t.cashback_redeemed));
+        set('inv2-pay',            fmt(t.invoice_2_pay));
+
+        // Cashback breakdown
+        set('cb-earned',   fmt(t.cashback_earned));
+        set('cb-cap',      fmt(t.cashback_cap));
+        set('cb-redeemed', fmt(t.cashback_redeemed));
+
+        document.getElementById('results').style.display = 'block';
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    // Handle Enter key on inputs
+    ['item-name','item-price','item-qty'].forEach(id => {
+        document.getElementById(id).addEventListener('keydown', e => {
+            if (e.key === 'Enter') addItem();
+        });
+    });
+
+    renderItems();
+</script>
+</body>
+</html>
