@@ -20,7 +20,8 @@ class Item(BaseModel):
     name: str
     price: float
     quantity: int = 1
-    eligible: bool
+    cashback_eligible: bool         # counts toward cashback generation
+    discount_eligible: bool = True  # counts toward $2,500 discount threshold
 
 
 class OptimizeRequest(BaseModel):

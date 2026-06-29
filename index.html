@@ -435,7 +435,10 @@
             <input type="number" id="item-price"    placeholder="Unit price ($)" min="0" step="0.01" inputmode="decimal">
             <input type="number" id="item-qty"      placeholder="Qty" min="1" step="1" value="1" inputmode="numeric" style="text-align:center;">
             <label class="cb-label">
-                <input type="checkbox" id="item-eligible" checked> Cashback eligible
+                <input type="checkbox" id="item-cashback-eligible" checked> Cashback eligible
+            </label>
+            <label class="cb-label">
+                <input type="checkbox" id="item-discount-eligible" checked> Discount eligible
             </label>
             <button class="btn-add" onclick="addItem()">Add</button>
         </div>
@@ -548,10 +551,11 @@
     /* ── Item management ───────────────────────────── */
 
     function addItem() {
-        const nameInput  = document.getElementById('item-name');
-        const priceInput = document.getElementById('item-price');
-        const qtyInput   = document.getElementById('item-qty');
-        const eligInput  = document.getElementById('item-eligible');
+        const nameInput     = document.getElementById('item-name');
+        const priceInput    = document.getElementById('item-price');
+        const qtyInput      = document.getElementById('item-qty');
+        const cashbackEligInput = document.getElementById('item-cashback-eligible');
+        const discEligInput = document.getElementById('item-discount-eligible');
 
         const name  = nameInput.value.trim() || `Item ${items.length + 1}`;
         const price = parseFloat(priceInput.value);
@@ -560,13 +564,18 @@
         if (isNaN(price) || price <= 0) { showToast('Please enter a valid price.'); priceInput.focus(); return; }
         if (isNaN(qty)   || qty   <  1) { showToast('Quantity must be at least 1.'); qtyInput.focus(); return; }
 
-        items.push({ id: Date.now(), name, price, quantity: qty, eligible: eligInput.checked });
+        items.push({
+            id: Date.now(), name, price, quantity: qty,
+            cashback_eligible: cashbackEligInput.checked,
+            discount_eligible: discEligInput.checked,
+        });
         renderItems();
 
-        nameInput.value   = '';
-        priceInput.value  = '';
-        qtyInput.value    = '1';
-        eligInput.checked = true;
+        nameInput.value          = '';
+        priceInput.value         = '';
+        qtyInput.value           = '1';
+        cashbackEligInput.checked    = true;
+        discEligInput.checked    = true;
         nameInput.focus();
     }
 
@@ -585,9 +594,14 @@
             <div class="item-row">
                 <div class="item-top">
                     <span class="item-name">${item.name}</span>
-                    <span class="badge ${item.eligible ? 'badge-green' : 'badge-red'}">
-                        ${item.eligible ? '✓ Eligible' : '✗ Ineligible'}
-                    </span>
+                    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;justify-content:flex-end;">
+                        <span class="badge ${item.cashback_eligible ? 'badge-green' : 'badge-red'}">
+                            ${item.cashback_eligible ? '✓ Cashback' : '✗ Cashback'}
+                        </span>
+                        <span class="badge ${item.discount_eligible ? 'badge-green' : 'badge-red'}">
+                            ${item.discount_eligible ? '✓ Discount' : '✗ Discount'}
+                        </span>
+                    </div>
                 </div>
                 <div class="item-bottom">
                     <span class="item-detail">$${fmt(item.price)}/unit &times; ${item.quantity} = $${fmt(item.price * item.quantity)}</span>
@@ -635,7 +649,7 @@
                 <span>
                     ${it.name}
                     <span class="qty-tag">&times;${it.quantity}</span>
-                    ${it.eligible ? '' : '<span class="badge badge-red" style="margin-left:4px;font-size:0.7rem;">Ineligible</span>'}
+                    ${it.cashback_eligible ? '' : '<span class="badge badge-red" style="margin-left:4px;font-size:0.7rem;">Ineligible</span>'}
                 </span>
                 <span class="inv-price">$${fmt(it.price * it.quantity)}</span>
             </div>

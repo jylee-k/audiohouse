@@ -30,14 +30,21 @@ Where:
 
 ### 2. Item Constraints & Decision Space
 
-* Given an array of $n$ items where each item $i$ has a unit price $P_i$, an integer quantity $Q_i \ge 1$, and a boolean flag $E_i$ (Cashback Eligibility).
+* Given an array of $n$ items where each item $i$ has:
+  * Unit price $P_i$
+  * Integer quantity $Q_i \ge 1$
+  * Boolean flag $E_i$ — **Cashback Eligibility**: whether the item's spend contributes to cashback generation
+  * Boolean flag $V_i$ — **Discount Eligibility**: whether the item's spend counts toward the $2,500 volume discount threshold
+
 * Every unit of every item must be assigned to **exactly one** invoice. Units of the same item **may be split** across both invoices.
 * Let integer variable $x_i \in \{0, 1, \ldots, Q_i\}$ represent the number of units of item $i$ assigned to Invoice 1:
   * $x_i = Q_i \implies$ All units assigned to Invoice 1
   * $x_i = 0 \implies$ All units assigned to Invoice 2
   * $0 < x_i < Q_i \implies$ Units are split — $x_i$ units go to Invoice 1, $(Q_i - x_i)$ units go to Invoice 2
 
-> ⚠️ **Critical Rule Modification:** Ineligible items ($E_i = \text{False}$) **are not** strictly forced into Invoice 2. They can be placed in Invoice 1 to act as "fillers" to help meet volume discount thresholds, though they will not generate cashback.
+> ⚠️ **Note on Cashback Eligibility:** Items with $E_i = \text{False}$ **are not** strictly forced into Invoice 2. They can be placed in Invoice 1 as "fillers" to help meet the $V_i$-qualified volume discount threshold, though they will not generate cashback.
+
+> ⚠️ **Note on Discount Eligibility:** Items with $V_i = \text{False}$ are included in the invoice and paid in full, but their spend does **not** accumulate toward the $2,500 discount threshold. They still contribute to the gross invoice total used for the cashback redemption cap.
 
 ---
 
@@ -45,22 +52,25 @@ Where:
 
 #### Rule A: Volume Discounts ($2,500 Thresholds)
 
-Both invoices independently qualify for a 12% cash discount on every complete block of $2,500 spent.
+Both invoices independently qualify for a 12% cash discount on every complete block of $2,500 spent. **Only items where $V_i = \text{True}$ count toward the threshold.** Non-discount-eligible items still appear on the invoice and must be paid in full — they simply do not unlock discount blocks.
 
-* Calculate gross totals for each invoice, accounting for split quantities:
+* Gross invoice totals (ALL items — used for payment calculations and the cashback redemption cap):
 
 $$T_1 = \sum_{i=1}^{n} (P_i \times x_i)$$
 
-
 $$T_2 = \sum_{i=1}^{n} (P_i \times (Q_i - x_i))$$
 
+* Discount-qualifying subtotals (only $V_i = \text{True}$ items):
 
-* Volume discounts are step-functions (use floor division):
+$$T_{1\text{-disc}} = \sum_{i: V_i = \text{True}} (P_i \times x_i)$$
 
-$$D_1 = \lfloor \frac{T_1}{2500} \rfloor \times 300$$
+$$T_{2\text{-disc}} = \sum_{i: V_i = \text{True}} (P_i \times (Q_i - x_i))$$
 
+* Volume discounts are step-functions driven by the discount-qualifying subtotals:
 
-$$D_2 = \lfloor \frac{T_2}{2500} \rfloor \times 300$$
+$$D_1 = \lfloor \frac{T_{1\text{-disc}}}{2500} \rfloor \times 300$$
+
+$$D_2 = \lfloor \frac{T_{2\text{-disc}}}{2500} \rfloor \times 300$$
 
 
 
@@ -86,7 +96,7 @@ $$C_{\text{earned}} = \lfloor \frac{\text{Raw } C_{\text{earned}}}{20} \rfloor \
 #### Rule C: Cashback Redemption (Invoice 2 Only)
 
 * Cashback earned from Invoice 1 can be applied to Invoice 2 immediately.
-* **The 20% Cap Rule:** Total cashback applied cannot exceed 20% of Invoice 2's value **after its volume discount has been applied** (i.e. the cap is computed on the post-discount amount, not the gross subtotal):
+* **The 20% Cap Rule:** Total cashback applied cannot exceed 20% of Invoice 2's **gross** value after its volume discount (the gross total $T_2$ includes all items — discount-eligible or not):
 
 $$T_{2\text{-after-discount}} = T_2 - D_2$$
 
@@ -103,10 +113,11 @@ $$C_{\text{redeemed}} = \min(C_{\text{earned}}, C_{\text{max}})$$
 
 ## Expected Edge Cases for the Agent to Handle
 
-1. **High-Value Ineligible Items:** Large items (like a $2,400 installation fee where $E_i = \text{False}$) paired with a small $100 eligible item should both be pushed to Invoice 1 by the algorithm to hit the $2,500 mark exactly to trigger $D_1 = 300$.
-2. **Zero-Sum Truncation:** If Invoice 2 contains too few items, $C_{\text{max}}$ drops, which limits $C_{\text{redeemed}}$. The engine must dynamically weigh whether transferring an eligible item to Invoice 2 to raise the cap yields more savings than keeping it in Invoice 1 to generate cashback.
-3. **Empty Invoices:** The math must handle scenarios gracefully where an invoice total is $0 without hitting divide-by-zero errors.
-4. **Quantity Splitting:** When $Q_i > 1$, the solver must evaluate all integer splits $x_i \in \{0, \ldots, Q_i\}$ to find the globally optimal allocation. A naive per-item binary assignment would miss solutions where, e.g., 2 of 3 units of the same item belong in Invoice 1.
+1. **High-Value Cashback-Ineligible Items:** Large items (like a $2,400 installation fee where $E_i = \text{False}$, $V_i = \text{True}$) paired with a small $100 eligible item should both be pushed to Invoice 1 by the algorithm to hit the $2,500 mark exactly and trigger $D_1 = 300$.
+2. **Non-Discount-Eligible Items:** Items with $V_i = \text{False}$ (e.g. delivery fees, service charges) never unlock discount blocks regardless of which invoice they are on. The solver may still place them strategically to increase $T_2$ and thereby raise the cashback redemption cap.
+3. **Zero-Sum Truncation:** If Invoice 2 contains too few items, $C_{\text{max}}$ drops, which limits $C_{\text{redeemed}}$. The engine must dynamically weigh whether transferring an eligible item to Invoice 2 to raise the cap yields more savings than keeping it in Invoice 1 to generate cashback.
+4. **Empty Invoices:** The math must handle scenarios gracefully where an invoice total is $0 without hitting divide-by-zero errors.
+5. **Quantity Splitting:** When $Q_i > 1$, the solver must evaluate all integer splits $x_i \in \{0, \ldots, Q_i\}$ to find the globally optimal allocation. A naive per-item binary assignment would miss solutions where, e.g., 2 of 3 units of the same item belong in Invoice 1.
 
 ## Recommended Solver Implementation
 
