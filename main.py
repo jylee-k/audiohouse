@@ -26,12 +26,13 @@ class Item(BaseModel):
 
 class OptimizeRequest(BaseModel):
     items: list[Item]
+    additional_cashback: float = 0
 
 
 @app.post("/api/optimize")
 def optimize(request: OptimizeRequest):
     items = [item.model_dump() for item in request.items]
-    return optimize_invoices(items)
+    return optimize_invoices(items, additional_cashback=request.additional_cashback)
 
 
 if __name__ == "__main__":

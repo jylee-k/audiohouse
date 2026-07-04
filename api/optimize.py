@@ -25,7 +25,10 @@ class handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length", 0))
             body = json.loads(self.rfile.read(length))
-            result = optimize_invoices(body["items"])
+            result = optimize_invoices(
+                body["items"],
+                additional_cashback=body.get("additional_cashback", 0),
+            )
             payload = json.dumps(result).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")

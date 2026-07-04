@@ -1,7 +1,9 @@
-from pulp import LpMaximize, LpProblem, LpVariable, lpSum
+from math import floor
+
+from pulp import LpMaximize, LpProblem, LpVariable, PULP_CBC_CMD, lpSum
 
 
-def optimize_invoices(items):
+def optimize_invoices(items, additional_cashback=0):
     """
     items = [
         {
@@ -10,6 +12,7 @@ def optimize_invoices(items):
             'discount_eligible': True,  # counts toward $2,500 discount threshold
         }, ...
     ]
+    additional_cashback = existing cashback dollars available for redemption.
 
     Decision: x[i] = number of units of item i assigned to Invoice 1 (0 <= x[i] <= quantity[i])
     The remaining (quantity[i] - x[i]) units go into Invoice 2.
@@ -18,10 +21,14 @@ def optimize_invoices(items):
                   toward the threshold. Non-discount-eligible items still appear on the
                   invoice and are paid in full; they simply don't unlock discount blocks.
     Cashback:     Earned from Invoice 1 cashback_eligible spend: $154 per $200 block, floored to $20
+                  Additional cashback is an optional request-level amount, floored to $20 blocks,
+                  and added to earned cashback for redemption.
     Cashback cap: 20% of Invoice 2 gross total AFTER its discount, floored to $20
                   (gross total includes ALL items, discount-eligible or not)
     Objective:    Maximise total savings (discounts + cashback redeemed)
     """
+    additional_cashback = max(float(additional_cashback or 0), 0)
+    usable_additional_cashback = floor(additional_cashback / 20) * 20
 
     prob = LpProblem("Invoice_Optimization", LpMaximize)
 
@@ -71,15 +78,15 @@ def optimize_invoices(items):
     prob += c_max <= (t2_after_discount * 0.20) / 20   # floor to $20 blocks
     actual_c_max = c_max * 20
 
-    # --- Cashback Redeemed: min(earned, cap) ---
+    # --- Cashback Redeemed: min(earned + additional, cap) ---
     c_redeemed = LpVariable("c_redeemed", cat="Integer", lowBound=0)
-    prob += c_redeemed <= actual_c_earned
+    prob += c_redeemed <= actual_c_earned + usable_additional_cashback
     prob += c_redeemed <= actual_c_max
 
     # --- Objective: Maximise savings ---
     prob += (d1 * 300) + (d2 * 300) + c_redeemed
 
-    prob.solve()
+    prob.solve(PULP_CBC_CMD(msg=False))
 
     # --- Extract Results ---
     def _int(v):
@@ -87,8 +94,6 @@ def optimize_invoices(items):
 
     d1_val = _int(d1)
     d2_val = _int(d2)
-    c_earned_val = _int(c_earned) * 20
-    c_max_val = _int(c_max) * 20
     c_redeemed_val = _int(c_redeemed)
 
     invoice_1_items = []
@@ -106,6 +111,12 @@ def optimize_invoices(items):
     inv2_subtotal = sum(it["price"] * it["quantity"] for it in invoice_2_items)
     inv1_discount = d1_val * 300
     inv2_discount = d2_val * 300
+    inv1_cashback_eligible = sum(
+        it["price"] * it["quantity"] for it in invoice_1_items if it["cashback_eligible"]
+    )
+    c_earned_val = floor((floor(inv1_cashback_eligible / 200) * 154) / 20) * 20
+    c_available_val = c_earned_val + usable_additional_cashback
+    c_max_val = floor(((inv2_subtotal - inv2_discount) * 0.20) / 20) * 20
     inv1_pay = inv1_subtotal - inv1_discount
     inv2_pay = inv2_subtotal - inv2_discount - c_redeemed_val
     total_pay = inv1_pay + inv2_pay
@@ -122,6 +133,8 @@ def optimize_invoices(items):
             "invoice_2_discount": inv2_discount,
             "invoice_2_after_discount": inv2_subtotal - inv2_discount,
             "cashback_earned": c_earned_val,
+            "additional_cashback": usable_additional_cashback,
+            "cashback_available": c_available_val,
             "cashback_cap": c_max_val,
             "cashback_redeemed": c_redeemed_val,
             "invoice_2_pay": inv2_pay,

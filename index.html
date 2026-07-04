@@ -64,6 +64,24 @@
             margin-bottom: 0.75rem;
         }
 
+        .global-input {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem);
+            gap: 0.75rem;
+            align-items: center;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 0.75rem;
+            margin-bottom: 1rem;
+        }
+
+        .global-input label {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            font-weight: 600;
+        }
+
         .cb-label {
             display: flex;
             align-items: center;
@@ -313,7 +331,7 @@
 
         .cb-grid {
             display: grid;
-            grid-template-columns: repeat(3, 1fr);
+            grid-template-columns: repeat(4, 1fr);
             gap: 0.6rem;
         }
 
@@ -390,6 +408,11 @@
             .cb-label   { grid-column: 1; align-self: center; }
             .btn-add    { grid-column: 2; width: 100%; }
 
+            .global-input {
+                grid-template-columns: 1fr;
+                gap: 0.45rem;
+            }
+
             /* Prevent iOS from zooming on focus — font-size already ≥16px */
 
             /* Item list: remove max-height scroll, let it grow */
@@ -441,6 +464,11 @@
                 <input type="checkbox" id="item-discount-eligible" checked> Discount eligible
             </label>
             <button class="btn-add" onclick="addItem()">Add</button>
+        </div>
+
+        <div class="global-input">
+            <label for="additional-cashback">Additional cashback available</label>
+            <input type="number" id="additional-cashback" placeholder="0.00" min="0" step="0.01" inputmode="decimal">
         </div>
 
         <h3>Items</h3>
@@ -511,6 +539,10 @@
                 <div class="cb-stat">
                     <div class="cb-label">Cashback Earned</div>
                     <div class="cb-value">$<span id="cb-earned">0</span></div>
+                </div>
+                <div class="cb-stat">
+                    <div class="cb-label">Additional Cashback</div>
+                    <div class="cb-value">$<span id="cb-additional">0</span></div>
                 </div>
                 <div class="cb-stat">
                     <div class="cb-label">Spend Cap (20% post-discount)</div>
@@ -617,6 +649,15 @@
         if (items.length === 0) { showToast('Please add at least one item.'); return; }
 
         const btn = document.getElementById('optimize-btn');
+        const additionalCashbackInput = document.getElementById('additional-cashback');
+        const additionalCashback = parseFloat(additionalCashbackInput.value || '0');
+
+        if (isNaN(additionalCashback) || additionalCashback < 0) {
+            showToast('Additional cashback cannot be negative.');
+            additionalCashbackInput.focus();
+            return;
+        }
+
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span>Optimizing…';
 
@@ -624,7 +665,7 @@
             const response = await fetch('/api/optimize', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ items })
+                body: JSON.stringify({ items, additional_cashback: additionalCashback })
             });
             if (!response.ok) throw new Error(`Server error ${response.status}`);
             const data = await response.json();
@@ -675,6 +716,7 @@
         set('inv2-pay',            fmt(t.invoice_2_pay));
 
         set('cb-earned',   fmt(t.cashback_earned));
+        set('cb-additional', fmt(t.additional_cashback || 0));
         set('cb-cap',      fmt(t.cashback_cap));
         set('cb-redeemed', fmt(t.cashback_redeemed));
 
